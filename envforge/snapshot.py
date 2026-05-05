@@ -56,6 +56,15 @@ def capture_pip_packages() -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def _run_command(cmd: list[str]) -> Optional[str]:
+    """Run a subprocess command and return stripped stdout, or None on failure."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return result.stdout.strip() or None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
 def take_snapshot() -> EnvSnapshot:
     """Capture a full snapshot of the current shell environment."""
     return EnvSnapshot(
