@@ -1,6 +1,4 @@
-"""Minimal CLI for envforge: snapshot and reproduce dev environments."""
-
-from __future__ import annotations
+"""CLI entry-point for envforge."""
 
 import argparse
 import sys
@@ -14,78 +12,99 @@ from envforge.snapshot import (
     capture_pip_packages,
     capture_python_version,
 )
+from envforge.validator import validate_snapshot
 
 
 def cmd_capture(args: argparse.Namespace) -> int:
-    """Capture the current environment and save it to a JSON snapshot file."""
     snapshot = EnvSnapshot(
-        env_vars=capture_env_vars(exclude=set(args.exclude or [])),
+        env_vars=capture_env_vars(),
         python_version=capture_python_version(),
         node_version=capture_node_version(),
         pip_packages=capture_pip_packages(),
     )
+
+    if args.validate:
+        result = validate_snapshot(snapshot)
+        for warning in result.warnings:
+            print(f"[warn] {warning}", file=sys.stderr)
+        if not result.valid:
+            for error in result.errors:
+                print(f"[error] {error}", file=sys.stderr)
+            print("Snapshot validation failed. Aborting.", file=sys.stderr)
+            return 1
+
     save_snapshot(snapshot, args.output)
     print(f"Snapshot saved to {args.output}")
     return 0
 
 
 def cmd_reproduce(args: argparse.Namespace) -> int:
-    """Load a snapshot and generate a bash reproduction script."""
-    snapshot = load_snapshot(args.snapshot)
-    write_reproduction_script(
-        snapshot,
-        output_path=args.output,
-        include_env=not args.no_env,
-        include_packages=not args.no_packages,
-    )
+    snapshot = load_snapshot(args.input)
+
+    if args.validate:
+        result = validate_snapshot(snapshot)
+        for warning in result.warnings:
+            print(f"[warn] {warning}", file=sys.stderr)
+        if not result.valid:
+            for error in result.errors:
+                print(f"[error] {error}", file=sys.stderr)
+            print("Snapshot validation failed. Aborting.", file=sys.stderr)
+            return 1
+
+    write_reproduction_script(snapshot, args.output)
     print(f"Reproduction script written to {args.output}")
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    snapshot = load_snapshot(args.input)
+    result = validate_snapshot(snapshot)
+
+    for warning in result.warnings:
+        print(f"[warn] {warning}")
+    for error in result.errors:
+        print(f"[error] {error}")
+
+    if result.valid:
+        print("Snapshot is valid.")
+        return 0
+    else:
+        print("Snapshot validation failed.")
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="envforge",
-        description="Snapshot and reproduce dev environments.",
+        prog="envforge", description="Snapshot and reproduce dev environments"
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
-    # capture sub-command
-    cap = sub.add_parser("capture", help="Capture the current environment.")
-    cap.add_argument(
-        "-o", "--output", default="snapshot.json",
-        help="Output snapshot file (default: snapshot.json)",
-    )
-    cap.add_argument(
-        "--exclude", nargs="*", metavar="KEY",
-        help="Additional env-var keys to exclude.",
-    )
-    cap.set_defaults(func=cmd_capture)
+    capture_p = sub.add_parser("capture", help="Capture current environment")
+    capture_p.add_argument("-o", "--output", default="snapshot.json")
+    capture_p.add_argument("--validate", action="store_true", help="Validate before saving")
+    capture_p.set_defaults(func=cmd_capture)
 
-    # reproduce sub-command
-    rep = sub.add_parser("reproduce", help="Generate a reproduction script.")
-    rep.add_argument("snapshot", help="Path to snapshot JSON file.")
-    rep.add_argument(
-        "-o", "--output", default="reproduce.sh",
-        help="Output script path (default: reproduce.sh)",
-    )
-    rep.add_argument(
-        "--no-env", action="store_true",
-        help="Omit environment variable exports.",
-    )
-    rep.add_argument(
-        "--no-packages", action="store_true",
-        help="Omit pip install commands.",
-    )
-    rep.set_defaults(func=cmd_reproduce)
+    reproduce_p = sub.add_parser("reproduce", help="Generate reproduction script")
+    reproduce_p.add_argument("-i", "--input", default="snapshot.json")
+    reproduce_p.add_argument("-o", "--output", default="reproduce.sh")
+    reproduce_p.add_argument("--validate", action="store_true", help="Validate before reproducing")
+    reproduce_p.set_defaults(func=cmd_reproduce)
+
+    validate_p = sub.add_parser("validate", help="Validate a snapshot file")
+    validate_p.add_argument("-i", "--input", default="snapshot.json")
+    validate_p.set_defaults(func=cmd_validate)
 
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main() -> None:
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return args.func(args)
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+    sys.exit(args.func(args))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
