@@ -24,6 +24,18 @@ def sample_snapshot():
     )
 
 
+@pytest.fixture
+def empty_snapshot():
+    """Snapshot with no pip packages or env vars, for edge-case testing."""
+    return EnvSnapshot(
+        env_vars={},
+        python_version="3.10.0",
+        node_version=None,
+        pip_packages={},
+        shell="/bin/bash",
+    )
+
+
 def test_supported_formats_constant():
     assert "shell" in SUPPORTED_FORMATS
     assert "dockerfile" in SUPPORTED_FORMATS
@@ -53,6 +65,14 @@ def test_export_as_shell_contains_pip_packages(sample_snapshot):
     assert "flask==2.3.1" in result
 
 
+def test_export_as_shell_empty_snapshot(empty_snapshot):
+    """Shell export should still produce a valid script with no packages or vars."""
+    result = export_as_shell(empty_snapshot)
+    assert result.startswith("#!/usr/bin/env bash")
+    assert "pip install" not in result
+    assert "export" not in result
+
+
 def test_export_as_dockerfile_has_from(sample_snapshot):
     result = export_as_dockerfile(sample_snapshot)
     assert "FROM python:3.11-slim" in result
@@ -69,6 +89,13 @@ def test_export_as_dockerfile_has_run_pip(sample_snapshot):
     assert "requests==2.28.0" in result
 
 
+def test_export_as_dockerfile_empty_snapshot(empty_snapshot):
+    """Dockerfile export with no packages should omit the RUN pip install line."""
+    result = export_as_dockerfile(empty_snapshot)
+    assert "FROM python:3.10-slim" in result
+    assert "RUN pip install" not in result
+
+
 def test_export_as_requirements_format(sample_snapshot):
     result = export_as_requirements(sample_snapshot)
     assert "flask==2.3.1" in result
@@ -79,6 +106,12 @@ def test_export_as_requirements_format(sample_snapshot):
 def test_export_as_requirements_no_env_vars(sample_snapshot):
     result = export_as_requirements(sample_snapshot)
     assert "HOME" not in result
+
+
+def test_export_as_requirements_empty_snapshot(empty_snapshot):
+    """Requirements export of an empty snapshot should be an empty string or just a newline."""
+    result = export_as_requirements(empty_snapshot)
+    assert result.strip() == ""
 
 
 def test_export_snapshot_dispatch(sample_snapshot):
