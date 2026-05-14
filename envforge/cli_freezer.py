@@ -28,6 +28,15 @@ def add_freezer_subparser(subparsers: argparse._SubParsersAction) -> None:
     p.set_defaults(func=cmd_freeze)
 
 
+def _print_summary(result, output_path: str) -> None:
+    """Print a human-readable summary of the freeze operation."""
+    print(f"[envforge] Frozen snapshot saved to '{output_path}'")
+    print(f"  Pinned packages : {len(result.pinned_packages)}")
+    print(f"  Locked env vars : {len(result.locked_env_vars)}")
+    if result.warnings:
+        print(f"  Warnings        : {len(result.warnings)} (run with --warn to see details)")
+
+
 def cmd_freeze(args: argparse.Namespace) -> int:
     try:
         snapshot = load_snapshot(args.snapshot)
@@ -48,9 +57,5 @@ def cmd_freeze(args: argparse.Namespace) -> int:
         print(f"[envforge] Error saving frozen snapshot: {exc}", file=sys.stderr)
         return 1
 
-    print(f"[envforge] Frozen snapshot saved to '{output_path}'")
-    print(f"  Pinned packages : {len(result.pinned_packages)}")
-    print(f"  Locked env vars : {len(result.locked_env_vars)}")
-    if result.warnings:
-        print(f"  Warnings        : {len(result.warnings)} (run with --warn to see details)")
+    _print_summary(result, output_path)
     return 0
