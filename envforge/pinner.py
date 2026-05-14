@@ -68,6 +68,22 @@ def pin_env_vars(snapshot: EnvSnapshot, var_names: List[str]) -> PinResult:
     return result
 
 
+def unpin_env_vars(snapshot: EnvSnapshot, var_names: List[str]) -> PinResult:
+    """Remove pin marker from specific environment variables."""
+    result = PinResult()
+    pinned_vars = set(getattr(snapshot, 'pinned_env_vars', []))
+
+    for var in var_names:
+        if var in pinned_vars:
+            pinned_vars.discard(var)
+            result.pinned_env_vars.append(var)
+        else:
+            result.skipped.append(var)
+
+    snapshot.pinned_env_vars = list(pinned_vars)
+    return result
+
+
 def list_pinned(snapshot: EnvSnapshot) -> dict:
     """Return a summary of all pinned packages and env vars."""
     pinned_pkgs = {
